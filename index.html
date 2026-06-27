@@ -351,6 +351,7 @@ function renderFiles(items, path){
             <td class="size-text">${formatSize(item.size)}</td>
             <td>${isPublic?`<div class="url-cell"><span class="url-text" title="${rawUrl}">${rawUrl}</span><button class="copy-btn" onclick="copyUrl('${rawUrl}',this)">Copiar</button></div>`:'<span style="color:var(--yellow);font-size:12px;">⚠️ Repo privado</span>'}</td>
             <td><div class="td-actions">
+              ${/\.(json|txt|csv|js|html|css|xml|md|svg)$/i.test(item.name)?`<button class="icon-btn" title="Editar en GitHub" onclick="window.open('https://github.com/${USER}/${currentRepo}/edit/main/${item.path}','_blank')">✏️</button>`:''}
               <button class="icon-btn" title="Descargar" onclick="downloadFile('${rawUrl}','${item.name}')">⬇️</button>
               <button class="icon-btn danger" title="Eliminar" onclick="deleteFile('${item.path}','${item.sha}')">🗑️</button>
             </div></td>
