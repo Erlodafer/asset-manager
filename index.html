@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub Asset Manager – Singular.live</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #238636; --accent-hover: #2ea043; --blue: #388bfd;
+    --red: #da3633; --yellow: #d29922; --radius: 8px;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; min-height: 100vh; }
+  #login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
+  .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; width: 100%; max-width: 420px; }
+  .login-card h1 { font-size: 20px; margin-bottom: 0.25rem; }
+  .login-card p { color: var(--muted); font-size: 13px; margin-bottom: 1.5rem; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; margin-top: 1rem; }
+  input[type=text], input[type=password] {
+    width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text); font-size: 14px; outline: none;
+  }
+  input:focus { border-color: var(--blue); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; font-size: 13px; transition: background 0.15s; text-decoration: none; }
+  .btn:hover { background: #30363d; }
+  .btn-green { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-green:hover { background: var(--accent-hover); }
+  .btn-blue { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .btn-blue:hover { background: var(--blue); }
+  .btn-red { background: transparent; border-color: var(--red); color: var(--red); }
+  .btn-red:hover { background: rgba(218,54,51,0.1); }
+  .btn-full { width: 100%; justify-content: center; margin-top: 1rem; }
+  #app { display: none; }
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .topbar h2 { font-size: 15px; font-weight: 600; }
+  .user-badge { font-size: 12px; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; }
+  .layout { display: flex; height: calc(100vh - 49px); }
+  .sidebar { width: 240px; min-width: 240px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 1rem 0; }
+  .sidebar-header { padding: 0 1rem 0.75rem; display: flex; align-items: center; justify-content: space-between; }
+  .sidebar-header span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  .repo-item { padding: 7px 1rem; cursor: pointer; display: flex; align-items: center; gap: 8px; border-left: 2px solid transparent; transition: background 0.1s; }
+  .repo-item:hover { background: var(--surface2); }
+  .repo-item.active { background: var(--surface2); border-left-color: var(--blue); color: var(--blue); }
+  .repo-item svg { flex-shrink: 0; opacity: 0.6; }
+  .repo-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .repo-vis { font-size: 10px; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 1px 6px; margin-left: auto; flex-shrink: 0; }
+  .main { flex: 1; overflow-y: auto; padding: 1.5rem; }
+  .main-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: gap; gap: 8px; }
+  .main-header h3 { font-size: 16px; font-weight: 600; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .breadcrumb { font-size: 12px; color: var(--muted); margin-bottom: 1rem; display: flex; align-items: center; gap: 4px; }
+  .breadcrumb span { cursor: pointer; color: var(--blue); }
+  .breadcrumb span:hover { text-decoration: underline; }
+  .file-table { width: 100%; border-collapse: collapse; }
+  .file-table th { text-align: left; padding: 8px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500; }
+  .file-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+  .file-table tr:last-child td { border-bottom: none; }
+  .file-table tr:hover td { background: var(--surface2); }
+  .file-name { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .file-name:hover { color: var(--blue); }
+  .file-ext { font-size: 10px; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; font-family: monospace; }
+  .url-cell { display: flex; align-items: center; gap: 6px; }
+  .url-text { font-family: monospace; font-size: 11px; color: var(--muted); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; transition: all 0.15s; white-space: nowrap; }
+  .copy-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .copy-btn.copied { border-color: var(--accent); color: var(--accent); }
+  .td-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .icon-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 13px; transition: all 0.1s; }
+  .icon-btn:hover { background: var(--surface2); color: var(--text); }
+  .icon-btn.danger:hover { color: var(--red); }
+  .empty-state { text-align: center; padding: 4rem 2rem; color: var(--muted); }
+  .empty-state svg { margin-bottom: 1rem; opacity: 0.4; }
+  .empty-state p { font-size: 13px; }
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 500; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; width: 100%; max-width: 480px; }
+  .modal h3 { font-size: 16px; margin-bottom: 1rem; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.25rem; }
+  .drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 2rem; text-align: center; color: var(--muted); cursor: pointer; transition: border-color 0.15s; margin: 1rem 0; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--blue); color: var(--text); }
+  .drop-zone p { font-size: 13px; margin-top: 8px; }
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; font-size: 13px; z-index: 999; transform: translateY(100px); opacity: 0; transition: all 0.3s; max-width: 320px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: var(--accent); }
+  .toast.error { border-color: var(--red); }
+  .loading { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; padding: 2rem; }
+  .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .size-text { color: var(--muted); font-size: 12px; }
+  select { padding: 7px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 13px; outline: none; }
+  .search-bar { display: flex; gap: 8px; margin-bottom: 1rem; }
+  .search-bar input { flex: 1; }
+  .file-selected-list { max-height: 120px; overflow-y: auto; margin: 8px 0; font-size: 12px; color: var(--muted); }
+  .file-selected-list div { padding: 2px 0; }
+  .progress-bar { height: 4px; background: var(--surface2); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.3s; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 20px; margin-left: 6px; }
+  .tag-folder { background: rgba(56,139,253,0.15); color: var(--blue); border: 1px solid rgba(56,139,253,0.3); }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <h1>🎬 GitHub Asset Manager</h1>
+    <p>Gestión de archivos para Singular.live</p>
+    <label>Token personal de GitHub</label>
+    <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+    <p style="font-size:11px;color:var(--muted);margin-top:6px;">Necesita permisos: <code>repo</code> y <code>delete_repo</code></p>
+    <button class="btn btn-green btn-full" onclick="doLogin()">Conectar a GitHub</button>
+    <p style="font-size:11px;color:var(--muted);margin-top:1rem;text-align:center;">El token se guarda solo en tu navegador</p>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span style="font-size:18px;">🎬</span>
+      <h2>GitHub Asset Manager</h2>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="user-badge" id="user-badge">...</span>
+      <button class="btn" onclick="logout()">Salir</button>
+    </div>
+  </div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>Repositorios</span>
+        <button class="btn" style="padding:3px 8px;font-size:12px;" onclick="openNewRepoModal()">+ Nuevo</button>
+      </div>
+      <div id="repo-list"></div>
+    </div>
+    <div class="main">
+      <div id="main-content">
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <p>Seleccioná un repositorio para ver sus archivos</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Subir archivo -->
+<div class="modal-bg" id="upload-modal">
+  <div class="modal">
+    <h3>⬆️ Subir archivos</h3>
+    <label>Repositorio</label>
+    <select id="upload-repo" style="width:100%;margin-top:4px;"></select>
+    <label style="margin-top:12px;">Carpeta destino (opcional)</label>
+    <input type="text" id="upload-path" placeholder="ej: assets/graficas" />
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <p>Clic o arrastrá archivos aquí</p>
+    </div>
+    <input type="file" id="file-input" multiple style="display:none" onchange="onFilesSelected(this.files)">
+    <div class="file-selected-list" id="file-selected-list"></div>
+    <div class="progress-bar" id="progress-bar" style="display:none"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('upload-modal')">Cancelar</button>
+      <button class="btn btn-green" id="upload-btn" onclick="doUpload()">Subir archivos</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Nuevo repositorio -->
+<div class="modal-bg" id="new-repo-modal">
+  <div class="modal">
+    <h3>📁 Crear repositorio</h3>
+    <label>Nombre del repositorio</label>
+    <input type="text" id="new-repo-name" placeholder="mis-assets-singular" />
+    <label>Descripción (opcional)</label>
+    <input type="text" id="new-repo-desc" placeholder="Assets para Singular.live" />
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;">
+      <input type="checkbox" id="new-repo-public" checked> Repositorio público (requerido para URLs raw públicas)
+    </label>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('new-repo-modal')">Cancelar</button>
+      <button class="btn btn-green" onclick="doCreateRepo()">Crear</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirmar eliminar repo -->
+<div class="modal-bg" id="del-repo-modal">
+  <div class="modal">
+    <h3>⚠️ Eliminar repositorio</h3>
+    <p style="color:var(--muted);margin-bottom:1rem;font-size:13px;">Esta acción es irreversible. Se eliminarán todos los archivos.</p>
+    <label>Escribí el nombre del repositorio para confirmar</label>
+    <input type="text" id="del-repo-confirm" placeholder="" />
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('del-repo-modal')">Cancelar</button>
+      <button class="btn btn-red" onclick="doDeleteRepo()">Eliminar repositorio</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let TOKEN = '', USER = '', REPOS = [], currentRepo = null, currentPath = '', selectedFiles = [];
+
+function save(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function load(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
+
+async function api(path, opts={}){
+  const r = await fetch('https://api.github.com'+path, {
+    headers:{ Authorization:'token '+TOKEN, Accept:'application/vnd.github+json', 'Content-Type':'application/json', ...opts.headers },
+    ...opts
+  });
+  if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.message||r.status); }
+  if(r.status===204) return {};
+  return r.json();
+}
+
+async function doLogin(){
+  TOKEN = document.getElementById('token-input').value.trim();
+  if(!TOKEN){ showToast('Ingresá tu token','error'); return; }
+  try {
+    const u = await api('/user');
+    USER = u.login;
+    save('gh_token', TOKEN);
+    save('gh_user', USER);
+    startApp();
+  } catch(e){ showToast('Token inválido: '+e.message,'error'); }
+}
+
+function logout(){
+  save('gh_token',''); save('gh_user','');
+  TOKEN=''; USER='';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+}
+
+async function startApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('user-badge').textContent='@'+USER;
+  await loadRepos();
+}
+
+async function loadRepos(){
+  const list = document.getElementById('repo-list');
+  list.innerHTML='<div class="loading"><div class="spinner"></div>Cargando...</div>';
+  try {
+    REPOS = await api('/user/repos?per_page=100&sort=updated');
+    renderRepoList();
+  } catch(e){ list.innerHTML='<div class="loading">Error: '+e.message+'</div>'; }
+}
+
+function renderRepoList(){
+  const list = document.getElementById('repo-list');
+  if(!REPOS.length){ list.innerHTML='<div style="padding:1rem;color:var(--muted);font-size:13px;">No hay repositorios</div>'; return; }
+  list.innerHTML = REPOS.map(r=>`
+    <div class="repo-item ${currentRepo===r.name?'active':''}" onclick="openRepo('${r.name}')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      <span class="repo-name">${r.name}</span>
+      <span class="repo-vis">${r.private?'privado':'público'}</span>
+    </div>
+  `).join('');
+}
+
+async function openRepo(name){
+  currentRepo = name; currentPath = '';
+  renderRepoList();
+  await loadFiles();
+}
+
+async function loadFiles(path=''){
+  currentPath = path;
+  const main = document.getElementById('main-content');
+  main.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando archivos...</div>';
+  try {
+    const items = await api(`/repos/${USER}/${currentRepo}/contents/${path}`);
+    renderFiles(Array.isArray(items)?items:[items], path);
+  } catch(e){
+    if(e.message.includes('This repository is empty')){
+      renderFiles([], path);
+    } else {
+      main.innerHTML='<div class="loading">Error: '+e.message+'</div>';
+    }
+  }
+}
+
+function renderFiles(items, path){
+  const folders = items.filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name));
+  const files = items.filter(i=>i.type==='file').sort((a,b)=>a.name.localeCompare(b.name));
+  const all = [...folders, ...files];
+  const repo = REPOS.find(r=>r.name===currentRepo)||{};
+  const isPublic = !repo.private;
+
+  const breadcrumbs = ['<span onclick="loadFiles(\'\')">'+currentRepo+'</span>'];
+  if(path){ let acc=''; path.split('/').forEach(p=>{ acc+=( acc?'/':'')+p; breadcrumbs.push('<span onclick="loadFiles(\''+acc+'\')">'+p+'</span>'); }); }
+
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <div class="main-header">
+      <div>
+        <h3>${currentRepo}</h3>
+        <div class="breadcrumb">${breadcrumbs.join(' / ')}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-blue" onclick="openUploadModal('${currentRepo}','${path}')">⬆️ Subir</button>
+        <button class="btn" onclick="openDelRepoModal('${currentRepo}')">🗑️ Eliminar repo</button>
+      </div>
+    </div>
+    ${!all.length ? `<div class="empty-state"><p>Este directorio está vacío</p></div>` : `
+    <table class="file-table">
+      <thead><tr>
+        <th>Nombre</th>
+        <th>Tamaño</th>
+        ${isPublic?'<th>URL Raw para Singular</th>':'<th>Visibilidad</th>'}
+        <th style="text-align:right">Acciones</th>
+      </tr></thead>
+      <tbody>
+        ${path?`<tr><td colspan="4"><div class="file-name" onclick="loadFiles('${path.split('/').slice(0,-1).join('/')}')">📁 ..</div></td></tr>`:''}
+        ${all.map(item=>{
+          if(item.type==='dir'){
+            return `<tr>
+              <td><div class="file-name" onclick="loadFiles('${item.path}')">📁 ${item.name}<span class="tag tag-folder">carpeta</span></div></td>
+              <td class="size-text">—</td>
+              <td class="size-text">—</td>
+              <td><div class="td-actions">
+                <button class="icon-btn danger" title="Eliminar carpeta" onclick="deleteFolder('${item.path}')">🗑️</button>
+              </div></td>
+            </tr>`;
+          }
+          const rawUrl = `https://raw.githubusercontent.com/${USER}/${currentRepo}/main/${item.path}`;
+          const ext = item.name.split('.').pop();
+          return `<tr>
+            <td><div class="file-name" onclick="window.open('${item.html_url}','_blank')">📄 ${item.name} <span class="file-ext">.${ext}</span></div></td>
+            <td class="size-text">${formatSize(item.size)}</td>
+            <td>${isPublic?`<div class="url-cell"><span class="url-text" title="${rawUrl}">${rawUrl}</span><button class="copy-btn" onclick="copyUrl('${rawUrl}',this)">Copiar</button></div>`:'<span style="color:var(--yellow);font-size:12px;">⚠️ Repo privado</span>'}</td>
+            <td><div class="td-actions">
+              <button class="icon-btn" title="Descargar" onclick="downloadFile('${rawUrl}','${item.name}')">⬇️</button>
+              <button class="icon-btn danger" title="Eliminar" onclick="deleteFile('${item.path}','${item.sha}')">🗑️</button>
+            </div></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`}
+  `;
+}
+
+function formatSize(bytes){
+  if(!bytes) return '—';
+  if(bytes<1024) return bytes+'B';
+  if(bytes<1048576) return (bytes/1024).toFixed(1)+'KB';
+  return (bytes/1048576).toFixed(1)+'MB';
+}
+
+function copyUrl(url, btn){
+  navigator.clipboard.writeText(url).then(()=>{
+    btn.textContent='✓ Copiado'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='Copiar'; btn.classList.remove('copied'); },2000);
+  });
+}
+
+function downloadFile(url, name){
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.target='_blank';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+async function deleteFile(path, sha){
+  if(!confirm('¿Eliminar "'+path+'"?')) return;
+  try {
+    await api(`/repos/${USER}/${currentRepo}/contents/${path}`,{
+      method:'DELETE', body:JSON.stringify({ message:'Delete '+path, sha })
+    });
+    showToast('Archivo eliminado','success');
+    loadFiles(currentPath);
+  } catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+async function deleteFolder(path){
+  if(!confirm('¿Eliminar toda la carpeta "'+path+'" y su contenido?')) return;
+  try {
+    const items = await api(`/repos/${USER}/${currentRepo}/contents/${path}`);
+    for(const item of items){
+      if(item.type==='file'){
+        await api(`/repos/${USER}/${currentRepo}/contents/${item.path}`,{
+          method:'DELETE', body:JSON.stringify({ message:'Delete '+item.path, sha:item.sha })
+        });
+      }
+    }
+    showToast('Carpeta eliminada','success');
+    loadFiles(currentPath);
+  } catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+function openUploadModal(repo, path){
+  const sel = document.getElementById('upload-repo');
+  sel.innerHTML = REPOS.map(r=>`<option value="${r.name}" ${r.name===repo?'selected':''}>${r.name}</option>`).join('');
+  document.getElementById('upload-path').value = path||'';
+  document.getElementById('file-selected-list').innerHTML='';
+  document.getElementById('progress-bar').style.display='none';
+  selectedFiles=[];
+  document.getElementById('upload-modal').classList.add('open');
+}
+
+function onFilesSelected(files){
+  selectedFiles = Array.from(files);
+  const list = document.getElementById('file-selected-list');
+  list.innerHTML = selectedFiles.map(f=>`<div>📄 ${f.name} (${formatSize(f.size)})</div>`).join('');
+}
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{ e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{
+  e.preventDefault(); dz.classList.remove('drag-over');
+  onFilesSelected(e.dataTransfer.files);
+});
+
+async function doUpload(){
+  if(!selectedFiles.length){ showToast('Seleccioná archivos primero','error'); return; }
+  const repo = document.getElementById('upload-repo').value;
+  const pathPrefix = document.getElementById('upload-path').value.trim().replace(/\/$/,'');
+  const pb = document.getElementById('progress-bar');
+  const pf = document.getElementById('progress-fill');
+  pb.style.display='block'; pf.style.width='0%';
+  let done=0;
+  for(const file of selectedFiles){
+    const filePath = pathPrefix ? `${pathPrefix}/${file.name}` : file.name;
+    const base64 = await toBase64(file);
+    try {
+      let sha='';
+      try { const ex = await api(`/repos/${USER}/${repo}/contents/${filePath}`); sha=ex.sha; } catch(e){}
+      await api(`/repos/${USER}/${repo}/contents/${filePath}`,{
+        method:'PUT', body:JSON.stringify({ message:`Upload ${file.name}`, content:base64, ...(sha?{sha}:{}) })
+      });
+      done++;
+      pf.style.width=((done/selectedFiles.length)*100)+'%';
+    } catch(e){ showToast('Error subiendo '+file.name+': '+e.message,'error'); }
+  }
+  closeModal('upload-modal');
+  showToast(done+' archivo(s) subido(s)','success');
+  if(currentRepo===repo) loadFiles(currentPath);
+}
+
+function toBase64(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>res(e.target.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+
+function openNewRepoModal(){ document.getElementById('new-repo-modal').classList.add('open'); }
+
+async function doCreateRepo(){
+  const name = document.getElementById('new-repo-name').value.trim();
+  const desc = document.getElementById('new-repo-desc').value.trim();
+  const isPublic = document.getElementById('new-repo-public').checked;
+  if(!name){ showToast('Ingresá un nombre','error'); return; }
+  try {
+    await api('/user/repos',{ method:'POST', body:JSON.stringify({ name, description:desc, private:!isPublic, auto_init:true }) });
+    showToast('Repositorio "'+name+'" creado','success');
+    closeModal('new-repo-modal');
+    document.getElementById('new-repo-name').value='';
+    document.getElementById('new-repo-desc').value='';
+    await loadRepos();
+    openRepo(name);
+  } catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+let repoToDelete='';
+function openDelRepoModal(name){
+  repoToDelete=name;
+  document.getElementById('del-repo-confirm').value='';
+  document.getElementById('del-repo-confirm').placeholder=name;
+  document.getElementById('del-repo-modal').classList.add('open');
+}
+
+async function doDeleteRepo(){
+  const confirm_name = document.getElementById('del-repo-confirm').value.trim();
+  if(confirm_name!==repoToDelete){ showToast('El nombre no coincide','error'); return; }
+  try {
+    await api(`/repos/${USER}/${repoToDelete}`,{ method:'DELETE' });
+    showToast('Repositorio "'+repoToDelete+'" eliminado','success');
+    closeModal('del-repo-modal');
+    currentRepo=null; currentPath='';
+    await loadRepos();
+    document.getElementById('main-content').innerHTML='<div class="empty-state"><p>Seleccioná un repositorio</p></div>';
+  } catch(e){ showToast('Error: '+e.message+'. Verificá el permiso delete_repo','error'); }
+}
+
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+let toastTimer;
+function showToast(msg, type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+type;
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.className='toast',3500);
+}
+
+window.addEventListener('click',e=>{ if(e.target.classList.contains('modal-bg')) e.target.classList.remove('open'); });
+
+(function init(){
+  const t=load('gh_token'), u=load('gh_user');
+  if(t&&u){ TOKEN=t; USER=u; startApp(); }
+})();
+</script>
+</body>
+</html>
