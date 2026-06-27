@@ -185,6 +185,20 @@
   </div>
 </div>
 
+<!-- Modal: Nueva carpeta -->
+<div class="modal-bg" id="new-folder-modal">
+  <div class="modal">
+    <h3>📁 Nueva carpeta</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:1rem;">GitHub no soporta carpetas vacías, se creará un archivo <code>.gitkeep</code> dentro.</p>
+    <label>Nombre de la carpeta</label>
+    <input type="text" id="new-folder-name" placeholder="ej: logos-izquierda" />
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('new-folder-modal')">Cancelar</button>
+      <button class="btn btn-green" onclick="doCreateFolder()">Crear carpeta</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Confirmar eliminar repo -->
 <div class="modal-bg" id="del-repo-modal">
   <div class="modal">
@@ -305,6 +319,7 @@ function renderFiles(items, path){
       </div>
       <div class="actions">
         <button class="btn btn-blue" onclick="openUploadModal('${currentRepo}','${path}')">⬆️ Subir</button>
+        <button class="btn" onclick="openNewFolderModal('${currentRepo}','${path}')">📁 Nueva carpeta</button>
         <button class="btn" onclick="openDelRepoModal('${currentRepo}')">🗑️ Eliminar repo</button>
       </div>
     </div>
@@ -467,6 +482,27 @@ async function doCreateRepo(){
     document.getElementById('new-repo-desc').value='';
     await loadRepos();
     openRepo(name);
+  } catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+let newFolderRepo='', newFolderPath='';
+function openNewFolderModal(repo, path){
+  newFolderRepo=repo; newFolderPath=path;
+  document.getElementById('new-folder-name').value='';
+  document.getElementById('new-folder-modal').classList.add('open');
+}
+
+async function doCreateFolder(){
+  const name = document.getElementById('new-folder-name').value.trim().replace(/\//g,'');
+  if(!name){ showToast('Ingresá un nombre de carpeta','error'); return; }
+  const fullPath = newFolderPath ? `${newFolderPath}/${name}/.gitkeep` : `${name}/.gitkeep`;
+  try {
+    await api(`/repos/${USER}/${newFolderRepo}/contents/${fullPath}`,{
+      method:'PUT', body:JSON.stringify({ message:`Create folder ${name}`, content:btoa('') })
+    });
+    showToast('Carpeta "'+name+'" creada','success');
+    closeModal('new-folder-modal');
+    if(currentRepo===newFolderRepo) loadFiles(newFolderPath);
   } catch(e){ showToast('Error: '+e.message,'error'); }
 }
 
