@@ -417,14 +417,19 @@ function renderFiles(items, path){
   const isPublic = !repo.private;
 
   const breadcrumbs = ['<span onclick="loadFiles(\'\')">'+currentRepo+'</span>'];
-  if(path){ let acc=''; path.split('/').forEach(p=>{ acc+=(acc?'/':'')+p; breadcrumbs.push('<span onclick="loadFiles(\''+acc+'\')">'+p+'</span>'); }); }
+  const pathParts = path ? path.split('/') : [];
+  if(path){ let acc=''; pathParts.forEach(p=>{ acc+=(acc?'/':'')+p; breadcrumbs.push('<span onclick="loadFiles(\''+acc+'\')">'+p+'</span>'); }); }
+  const parentPath = pathParts.slice(0,-1).join('/');
 
   const main = document.getElementById('main-content');
   main.innerHTML = `
     <div class="main-header">
       <div>
         <h3>${currentRepo}</h3>
-        <div class="breadcrumb">${breadcrumbs.join(' / ')}</div>
+        <div class="breadcrumb">
+          ${path ? `<button class="btn" style="padding:3px 10px;font-size:12px;margin-right:6px;" onclick="loadFiles('${parentPath}')">← Volver</button>` : ''}
+          ${breadcrumbs.join(' / ')}
+        </div>
       </div>
       <div class="actions">
         <button class="btn btn-blue" onclick="openUploadModal('${currentRepo}','${path}')">⬆️ Subir</button>
