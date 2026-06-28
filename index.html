@@ -238,8 +238,12 @@
     <label>Descripción (opcional)</label>
     <input type="text" id="new-repo-desc" placeholder="Assets para Singular.live" />
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;">
-      <input type="checkbox" id="new-repo-public" checked> Repositorio público (requerido para URLs raw públicas)
+      <input type="checkbox" id="new-repo-public" checked onchange="togglePagesCheck()"> Repositorio público (requerido para URLs raw públicas)
     </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;" id="pages-label">
+      <input type="checkbox" id="new-repo-pages" checked> Activar GitHub Pages automáticamente (rama <code>main</code>)
+    </label>
+    <p id="pages-warning" style="display:none;font-size:11px;color:var(--yellow);margin-top:6px;">⚠️ GitHub Pages solo funciona en repositorios públicos (o con plan pago).</p>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('new-repo-modal')">Cancelar</button>
       <button class="btn btn-green" onclick="doCreateRepo()">Crear</button>
@@ -573,19 +577,49 @@ function toBase64(file){
   });
 }
 
-function openNewRepoModal(){ document.getElementById('new-repo-modal').classList.add('open'); }
+function openNewRepoModal(){
+  document.getElementById('new-repo-name').value='';
+  document.getElementById('new-repo-desc').value='';
+  document.getElementById('new-repo-public').checked=true;
+  document.getElementById('new-repo-pages').checked=true;
+  document.getElementById('pages-label').style.opacity='1';
+  document.getElementById('pages-warning').style.display='none';
+  document.getElementById('new-repo-modal').classList.add('open');
+}
+
+function togglePagesCheck(){
+  const isPublic = document.getElementById('new-repo-public').checked;
+  document.getElementById('pages-label').style.opacity = isPublic ? '1' : '0.5';
+  document.getElementById('pages-warning').style.display = isPublic ? 'none' : 'block';
+  if(!isPublic) document.getElementById('new-repo-pages').checked = false;
+}
 
 async function doCreateRepo(){
   const name = document.getElementById('new-repo-name').value.trim();
   const desc = document.getElementById('new-repo-desc').value.trim();
   const isPublic = document.getElementById('new-repo-public').checked;
+  const enablePages = document.getElementById('new-repo-pages').checked;
   if(!name){ showToast('Ingresá un nombre','error'); return; }
   try {
     await api('/user/repos',{ method:'POST', body:JSON.stringify({ name, description:desc, private:!isPublic, auto_init:true }) });
-    showToast('Repositorio "'+name+'" creado','success');
+
+    if(enablePages && isPublic){
+      // Esperar un momento para que GitHub inicialice el repo antes de activar Pages
+      await new Promise(r=>setTimeout(r,2000));
+      try {
+        await api(`/repos/${USER}/${name}/pages`,{
+          method:'POST',
+          body:JSON.stringify({ source:{ branch:'main', path:'/' } })
+        });
+        showToast('Repositorio "'+name+'" creado con GitHub Pages activo ✅','success');
+      } catch(pe){
+        showToast('Repo creado, pero Pages falló: '+pe.message,'error');
+      }
+    } else {
+      showToast('Repositorio "'+name+'" creado','success');
+    }
+
     closeModal('new-repo-modal');
-    document.getElementById('new-repo-name').value='';
-    document.getElementById('new-repo-desc').value='';
     await loadRepos();
     openRepo(name);
   } catch(e){ showToast('Error: '+e.message,'error'); }
