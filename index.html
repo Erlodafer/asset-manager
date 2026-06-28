@@ -311,6 +311,20 @@
   </div>
 </div>
 
+<!-- Modal: Renombrar archivo o carpeta -->
+<div class="modal-bg" id="rename-modal">
+  <div class="modal">
+    <h3 id="rename-modal-title">🏷️ Renombrar</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:1rem;" id="rename-modal-hint"></p>
+    <label>Nuevo nombre</label>
+    <input type="text" id="rename-input" placeholder="nuevo-nombre" />
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('rename-modal')">Cancelar</button>
+      <button class="btn btn-blue" onclick="doRename()">Renombrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -454,6 +468,7 @@ function renderFiles(items, path){
               <td class="size-text">—</td>
               <td class="size-text">—</td>
               <td><div class="td-actions">
+                <button class="icon-btn" title="Renombrar carpeta" onclick="openRenameModal('folder','${item.path}','${item.name}')">🏷️</button>
                 <button class="icon-btn danger" title="Eliminar carpeta" onclick="deleteFolder('${item.path}')">🗑️</button>
               </div></td>
             </tr>`;
@@ -465,6 +480,7 @@ function renderFiles(items, path){
             <td class="size-text">${formatSize(item.size)}</td>
             <td>${isPublic?`<div class="url-cell"><span class="url-text" title="${rawUrl}">${rawUrl}</span><button class="copy-btn" onclick="copyUrl('${rawUrl}',this)">Copiar</button></div>`:'<span style="color:var(--yellow);font-size:12px;">⚠️ Repo privado</span>'}</td>
             <td><div class="td-actions">
+              <button class="icon-btn" title="Renombrar archivo" onclick="openRenameModal('file','${item.path}','${item.name}','${item.sha}')">🏷️</button>
               ${/\.(json|txt|csv|js|html|css|xml|md|svg)$/i.test(item.name)?`<button class="icon-btn" title="Editar en GitHub" onclick="window.open('https://github.com/${USER}/${currentRepo}/edit/main/${item.path}','_blank')">✏️</button>`:''}
               <button class="icon-btn" title="Descargar" onclick="downloadFile('${rawUrl}','${item.name}')">⬇️</button>
               <button class="icon-btn danger" title="Eliminar" onclick="deleteFile('${item.path}','${item.sha}')">🗑️</button>
@@ -853,7 +869,65 @@ function showToast(msg, type=''){
   toastTimer=setTimeout(()=>t.className='toast',3500);
 }
 
+/* ── RENOMBRAR ── */
+let renameType='', renamePath='', renameOldName='', renameSha='';
+
+function openRenameModal(type, path, oldName, sha=''){
+  renameType=type; renamePath=path; renameOldName=oldName; renameSha=sha;
+  document.getElementById('rename-modal-title').textContent = type==='folder' ? '🏷️ Renombrar carpeta' : '🏷️ Renombrar archivo';
+  document.getElementById('rename-modal-hint').textContent = 'Nombre actual: ' + oldName;
+  document.getElementById('rename-input').value = oldName;
+  document.getElementById('rename-modal').classList.add('open');
+  setTimeout(()=>{ const el=document.getElementById('rename-input'); el.focus(); el.select(); },100);
+}
+
+async function doRename(){
+  const newName = document.getElementById('rename-input').value.trim();
+  if(!newName){ showToast('Ingresá un nombre','error'); return; }
+  if(newName === renameOldName){ closeModal('rename-modal'); return; }
+
+  const parentDir = renamePath.split('/').slice(0,-1).join('/');
+  const newPath = parentDir ? parentDir+'/'+newName : newName;
+
+  try {
+    if(renameType === 'file'){
+      // Archivos: descargar contenido, crear con nuevo nombre, borrar el viejo
+      const fileData = await api(`/repos/${USER}/${currentRepo}/contents/${renamePath}`);
+      await api(`/repos/${USER}/${currentRepo}/contents/${newPath}`,{
+        method:'PUT',
+        body:JSON.stringify({ message:`Rename ${renameOldName} to ${newName}`, content:fileData.content.replace(/\n/g,'') })
+      });
+      await api(`/repos/${USER}/${currentRepo}/contents/${renamePath}`,{
+        method:'DELETE',
+        body:JSON.stringify({ message:`Remove old ${renameOldName}`, sha:fileData.sha })
+      });
+      showToast('Archivo renombrado a "'+newName+'"','success');
+
+    } else {
+      // Carpetas: mover todos los archivos dentro a la nueva ruta
+      const items = await api(`/repos/${USER}/${currentRepo}/contents/${renamePath}`);
+      const filesToMove = Array.isArray(items) ? items.filter(i=>i.type==='file') : [];
+      for(const item of filesToMove){
+        const fileData = await api(`/repos/${USER}/${currentRepo}/contents/${item.path}`);
+        const destPath = newPath+'/'+item.name;
+        await api(`/repos/${USER}/${currentRepo}/contents/${destPath}`,{
+          method:'PUT',
+          body:JSON.stringify({ message:`Move ${item.name} to ${newName}/`, content:fileData.content.replace(/\n/g,'') })
+        });
+        await api(`/repos/${USER}/${currentRepo}/contents/${item.path}`,{
+          method:'DELETE',
+          body:JSON.stringify({ message:`Remove old ${item.path}`, sha:fileData.sha })
+        });
+      }
+      showToast('Carpeta renombrada a "'+newName+'"','success');
+    }
+    closeModal('rename-modal');
+    loadFiles(currentPath);
+  } catch(e){ showToast('Error al renombrar: '+e.message,'error'); }
+}
+
 window.addEventListener('click',e=>{ if(e.target.classList.contains('modal-bg')) e.target.classList.remove('open'); });
+window.addEventListener('keydown',e=>{ if(e.key==='Enter' && document.getElementById('rename-modal').classList.contains('open')) doRename(); });
 
 (function init(){
   const t=load('gh_token'), u=load('gh_user');
