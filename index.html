@@ -133,6 +133,14 @@
   .add-file-btn:hover { border-color: var(--blue); }
   .remove-file-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px; line-height: 1; }
   .remove-file-btn:hover { color: var(--red); }
+
+  /* ── SELECCIÓN MÚLTIPLE ── */
+  .select-col { width: 32px; }
+  .row-checkbox, #select-all-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: var(--blue); }
+  .bulk-bar { display: none; align-items: center; justify-content: space-between; gap: 12px; background: rgba(56,139,253,0.1); border: 1px solid rgba(56,139,253,0.35); border-radius: var(--radius); padding: 8px 14px; margin-bottom: 12px; }
+  .bulk-bar.show { display: flex; }
+  .bulk-bar-text { font-size: 13px; color: var(--text); }
+  .bulk-bar-actions { display: flex; gap: 8px; }
 </style>
 </head>
 <body>
@@ -325,11 +333,25 @@
   </div>
 </div>
 
+<!-- Modal: Confirmar eliminar varios -->
+<div class="modal-bg" id="del-bulk-modal">
+  <div class="modal">
+    <h3>⚠️ Eliminar elementos seleccionados</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:1rem;">Esta acción es irreversible. Se eliminarán los siguientes elementos:</p>
+    <div class="file-selected-list" id="bulk-delete-list" style="max-height:180px;"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('del-bulk-modal')">Cancelar</button>
+      <button class="btn btn-red" id="bulk-delete-confirm-btn" onclick="doBulkDelete()">Eliminar todo</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 let TOKEN = '', USER = '', REPOS = [], currentRepo = null, currentPath = '', selectedFiles = [];
 let ALL_GISTS = [], editingGistId = null, gistToDelete = null;
+let selectedItems = new Map(); // path -> {path, type, name, sha}
 
 function save(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 function load(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
@@ -424,6 +446,8 @@ async function loadFiles(path=''){
 }
 
 function renderFiles(items, path){
+  selectedItems.clear(); // resetear selección al navegar
+
   const folders = items.filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name));
   const files = items.filter(i=>i.type==='file').sort((a,b)=>a.name.localeCompare(b.name));
   const all = [...folders, ...files];
@@ -451,19 +475,28 @@ function renderFiles(items, path){
         <button class="btn btn-red" style="border-color:var(--red)" onclick="openDelRepoModal('${currentRepo}')">🗑️ Eliminar repo</button>
       </div>
     </div>
+    <div class="bulk-bar" id="bulk-bar">
+      <span class="bulk-bar-text" id="bulk-bar-text">0 seleccionados</span>
+      <div class="bulk-bar-actions">
+        <button class="btn" onclick="clearSelection()">Cancelar selección</button>
+        <button class="btn btn-red" onclick="openBulkDeleteModal()">🗑️ Eliminar seleccionados</button>
+      </div>
+    </div>
     ${!all.length ? `<div class="empty-state"><p>Este directorio está vacío</p></div>` : `
     <table class="file-table">
       <thead><tr>
+        <th class="select-col"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)"></th>
         <th>Nombre</th>
         <th>Tamaño</th>
         ${isPublic?'<th>URL Raw para Singular</th>':'<th>Visibilidad</th>'}
         <th style="text-align:right">Acciones</th>
       </tr></thead>
       <tbody>
-        ${path?`<tr><td colspan="4"><div class="file-name" onclick="loadFiles('${path.split('/').slice(0,-1).join('/')}')">📁 ..</div></td></tr>`:''}
+        ${path?`<tr><td></td><td colspan="4"><div class="file-name" onclick="loadFiles('${path.split('/').slice(0,-1).join('/')}')">📁 ..</div></td></tr>`:''}
         ${all.map(item=>{
           if(item.type==='dir'){
             return `<tr>
+              <td class="select-col"><input type="checkbox" class="row-checkbox" data-path="${item.path}" data-type="folder" data-name="${escapeAttr(item.name)}" data-sha="" onchange="onRowCheckboxChange(this)"></td>
               <td><div class="file-name" onclick="loadFiles('${item.path}')">📁 ${item.name}<span class="tag tag-folder">carpeta</span></div></td>
               <td class="size-text">—</td>
               <td class="size-text">—</td>
@@ -476,6 +509,7 @@ function renderFiles(items, path){
           const rawUrl = `https://raw.githubusercontent.com/${USER}/${currentRepo}/main/${item.path}`;
           const ext = item.name.split('.').pop();
           return `<tr>
+            <td class="select-col"><input type="checkbox" class="row-checkbox" data-path="${item.path}" data-type="file" data-name="${escapeAttr(item.name)}" data-sha="${item.sha}" onchange="onRowCheckboxChange(this)"></td>
             <td><div class="file-name" onclick="window.open('${item.html_url}','_blank')">📄 ${item.name} <span class="file-ext">.${ext}</span></div></td>
             <td class="size-text">${formatSize(item.size)}</td>
             <td>${isPublic?`<div class="url-cell"><span class="url-text" title="${rawUrl}">${rawUrl}</span><button class="copy-btn" onclick="copyUrl('${rawUrl}',this)">Copiar</button></div>`:'<span style="color:var(--yellow);font-size:12px;">⚠️ Repo privado</span>'}</td>
@@ -490,6 +524,7 @@ function renderFiles(items, path){
       </tbody>
     </table>`}
   `;
+  updateBulkBar();
 }
 
 function formatSize(bytes){
@@ -537,6 +572,80 @@ async function deleteFolder(path){
     showToast('Carpeta eliminada','success');
     loadFiles(currentPath);
   } catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+/* ── SELECCIÓN MÚLTIPLE Y BORRADO MASIVO ── */
+function onRowCheckboxChange(cb){
+  const { path, type, name, sha } = cb.dataset;
+  if(cb.checked){ selectedItems.set(path, { path, type, name, sha }); }
+  else { selectedItems.delete(path); }
+  updateBulkBar();
+}
+
+function toggleSelectAll(checked){
+  document.querySelectorAll('.row-checkbox').forEach(cb=>{
+    cb.checked = checked;
+    onRowCheckboxChange(cb);
+  });
+}
+
+function clearSelection(){
+  selectedItems.clear();
+  document.querySelectorAll('.row-checkbox').forEach(cb=>cb.checked=false);
+  updateBulkBar();
+}
+
+function updateBulkBar(){
+  const bar = document.getElementById('bulk-bar');
+  if(!bar) return;
+  const count = selectedItems.size;
+  bar.classList.toggle('show', count>0);
+  const text = document.getElementById('bulk-bar-text');
+  if(text) text.textContent = count+' elemento'+(count!==1?'s':'')+' seleccionado'+(count!==1?'s':'');
+  const rowCbs = document.querySelectorAll('.row-checkbox');
+  const selectAllCb = document.getElementById('select-all-checkbox');
+  if(selectAllCb) selectAllCb.checked = rowCbs.length>0 && count===rowCbs.length;
+}
+
+function openBulkDeleteModal(){
+  if(!selectedItems.size) return;
+  const list = document.getElementById('bulk-delete-list');
+  list.innerHTML = Array.from(selectedItems.values()).map(i=>
+    `<div>${i.type==='folder'?'📁':'📄'} ${i.name}</div>`
+  ).join('');
+  document.getElementById('del-bulk-modal').classList.add('open');
+}
+
+async function doBulkDelete(){
+  const items = Array.from(selectedItems.values());
+  if(!items.length) return;
+  const btn = document.getElementById('bulk-delete-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Eliminando...';
+
+  let ok = 0, fail = 0;
+  for(const item of items){
+    try {
+      if(item.type==='file'){
+        await api(`/repos/${USER}/${currentRepo}/contents/${item.path}`,{
+          method:'DELETE', body:JSON.stringify({ message:'Delete '+item.path, sha:item.sha })
+        });
+      } else {
+        const contents = await api(`/repos/${USER}/${currentRepo}/contents/${item.path}`);
+        const filesInFolder = Array.isArray(contents) ? contents.filter(i=>i.type==='file') : [];
+        for(const f of filesInFolder){
+          await api(`/repos/${USER}/${currentRepo}/contents/${f.path}`,{
+            method:'DELETE', body:JSON.stringify({ message:'Delete '+f.path, sha:f.sha })
+          });
+        }
+      }
+      ok++;
+    } catch(e){ fail++; }
+  }
+
+  btn.disabled = false; btn.textContent = 'Eliminar todo';
+  closeModal('del-bulk-modal');
+  showToast(ok+' elemento(s) eliminado(s)'+(fail?`, ${fail} con error`:''), fail?'error':'success');
+  loadFiles(currentPath);
 }
 
 function openUploadModal(repo, path){
