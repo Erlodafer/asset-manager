@@ -220,9 +220,18 @@
   <div class="modal">
     <h3>⬆️ Subir archivos</h3>
     <label>Repositorio</label>
-    <select id="upload-repo" style="width:100%;margin-top:4px;"></select>
+    <select id="upload-repo" style="width:100%;margin-top:4px;" onchange="refreshFileConflictPreview()"></select>
     <label style="margin-top:12px;">Carpeta destino (opcional)</label>
-    <input type="text" id="upload-path" placeholder="ej: assets/graficas" />
+    <input type="text" id="upload-path" placeholder="ej: assets/graficas" oninput="onUploadPathInput()" />
+    <label style="margin-top:12px;">Si el archivo ya existe en el repositorio</label>
+    <div style="display:flex;gap:18px;margin-top:4px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer;margin:0;">
+        <input type="radio" name="upload-conflict-mode" value="replace" checked> 🔄 Reemplazar
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer;margin:0;">
+        <input type="radio" name="upload-conflict-mode" value="skip"> ⏭️ Omitir (no subir)
+      </label>
+    </div>
     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       <p>Clic o arrastrá archivos aquí</p>
@@ -654,14 +663,45 @@ function openUploadModal(repo, path){
   document.getElementById('upload-path').value = path||'';
   document.getElementById('file-selected-list').innerHTML='';
   document.getElementById('progress-bar').style.display='none';
+  const replaceRadio = document.querySelector('input[name="upload-conflict-mode"][value="replace"]');
+  if(replaceRadio) replaceRadio.checked = true;
   selectedFiles=[];
   document.getElementById('upload-modal').classList.add('open');
 }
 
 function onFilesSelected(files){
   selectedFiles = Array.from(files);
+  refreshFileConflictPreview();
+}
+
+let pathDebounceTimer;
+function onUploadPathInput(){
+  clearTimeout(pathDebounceTimer);
+  pathDebounceTimer = setTimeout(refreshFileConflictPreview, 500);
+}
+
+/* Consulta cuáles de los archivos seleccionados ya existen en el destino,
+   para mostrar de una vez si se van a reemplazar o subir como nuevos. */
+async function refreshFileConflictPreview(){
   const list = document.getElementById('file-selected-list');
-  list.innerHTML = selectedFiles.map(f=>`<div>📄 ${f.name} (${formatSize(f.size)})</div>`).join('');
+  if(!selectedFiles.length){ list.innerHTML=''; return; }
+  const repo = document.getElementById('upload-repo').value;
+  const pathPrefix = document.getElementById('upload-path').value.trim().replace(/\/$/,'');
+
+  list.innerHTML = selectedFiles.map((f,i)=>
+    `<div id="conflict-row-${i}">📄 ${f.name} (${formatSize(f.size)}) <span style="color:var(--muted);">— comprobando...</span></div>`
+  ).join('');
+
+  selectedFiles.forEach(async (f,i)=>{
+    const filePath = pathPrefix ? `${pathPrefix}/${f.name}` : f.name;
+    let exists = false;
+    try { await api(`/repos/${USER}/${repo}/contents/${filePath}`); exists = true; } catch(e){ exists = false; }
+    const row = document.getElementById('conflict-row-'+i);
+    if(!row) return;
+    row.innerHTML = exists
+      ? `📄 ${f.name} (${formatSize(f.size)}) <span style="color:var(--yellow);">— 🔄 ya existe</span>`
+      : `📄 ${f.name} (${formatSize(f.size)}) <span style="color:var(--accent);">— 🆕 nuevo</span>`;
+  });
 }
 
 const dz = document.getElementById('drop-zone');
@@ -676,25 +716,39 @@ async function doUpload(){
   if(!selectedFiles.length){ showToast('Seleccioná archivos primero','error'); return; }
   const repo = document.getElementById('upload-repo').value;
   const pathPrefix = document.getElementById('upload-path').value.trim().replace(/\/$/,'');
+  const conflictMode = document.querySelector('input[name="upload-conflict-mode"]:checked').value; // 'replace' | 'skip'
   const pb = document.getElementById('progress-bar');
   const pf = document.getElementById('progress-fill');
   pb.style.display='block'; pf.style.width='0%';
+  let uploaded=0, replaced=0, skipped=0, errors=0;
   let done=0;
   for(const file of selectedFiles){
     const filePath = pathPrefix ? `${pathPrefix}/${file.name}` : file.name;
-    const base64 = await toBase64(file);
+    let sha='';
+    try { const ex = await api(`/repos/${USER}/${repo}/contents/${filePath}`); sha=ex.sha; } catch(e){}
+
+    if(sha && conflictMode==='skip'){
+      skipped++;
+      done++; pf.style.width=((done/selectedFiles.length)*100)+'%';
+      continue;
+    }
+
     try {
-      let sha='';
-      try { const ex = await api(`/repos/${USER}/${repo}/contents/${filePath}`); sha=ex.sha; } catch(e){}
+      const base64 = await toBase64(file);
       await api(`/repos/${USER}/${repo}/contents/${filePath}`,{
         method:'PUT', body:JSON.stringify({ message:`Upload ${file.name}`, content:base64, ...(sha?{sha}:{}) })
       });
-      done++;
-      pf.style.width=((done/selectedFiles.length)*100)+'%';
-    } catch(e){ showToast('Error subiendo '+file.name+': '+e.message,'error'); }
+      uploaded++;
+      if(sha) replaced++;
+    } catch(e){ errors++; showToast('Error subiendo '+file.name+': '+e.message,'error'); }
+    done++; pf.style.width=((done/selectedFiles.length)*100)+'%';
   }
   closeModal('upload-modal');
-  showToast(done+' archivo(s) subido(s)','success');
+  const parts = [];
+  parts.push(uploaded+' subido(s)'+(replaced?` (${replaced} reemplazado(s))`:''));
+  if(skipped) parts.push(skipped+' omitido(s) por ya existir');
+  if(errors) parts.push(errors+' con error');
+  showToast(parts.join(', '), errors?'error':'success');
   if(currentRepo===repo) loadFiles(currentPath);
 }
 
