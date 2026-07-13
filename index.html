@@ -268,6 +268,21 @@
   </div>
 </div>
 
+<!-- Modal: Nuevo archivo -->
+<div class="modal-bg" id="new-file-modal">
+  <div class="modal">
+    <h3>📄 Crear archivo</h3>
+    <label>Nombre del archivo</label>
+    <input type="text" id="new-file-name" placeholder="ej: datos.json" />
+    <label style="margin-top:12px;">Contenido (opcional)</label>
+    <textarea id="new-file-content" rows="8" placeholder="Contenido del archivo..."></textarea>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('new-file-modal')">Cancelar</button>
+      <button class="btn btn-green" id="new-file-create-btn" onclick="doCreateFile()">Crear archivo</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Nueva carpeta -->
 <div class="modal-bg" id="new-folder-modal">
   <div class="modal">
@@ -361,6 +376,8 @@
 let TOKEN = '', USER = '', REPOS = [], currentRepo = null, currentPath = '', selectedFiles = [];
 let ALL_GISTS = [], editingGistId = null, gistToDelete = null;
 let selectedItems = new Map(); // path -> {path, type, name, sha}
+let currentFolderItems = []; // items crudos de la carpeta actual, para filtrar sin recargar
+let currentSearchQuery = '';
 
 function save(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 function load(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
@@ -456,12 +473,8 @@ async function loadFiles(path=''){
 
 function renderFiles(items, path){
   selectedItems.clear(); // resetear selección al navegar
-
-  const folders = items.filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name));
-  const files = items.filter(i=>i.type==='file').sort((a,b)=>a.name.localeCompare(b.name));
-  const all = [...folders, ...files];
-  const repo = REPOS.find(r=>r.name===currentRepo)||{};
-  const isPublic = !repo.private;
+  currentFolderItems = items;
+  currentSearchQuery = '';
 
   const breadcrumbs = ['<span onclick="loadFiles(\'\')">'+currentRepo+'</span>'];
   const pathParts = path ? path.split('/') : [];
@@ -480,9 +493,14 @@ function renderFiles(items, path){
       </div>
       <div class="actions">
         <button class="btn btn-blue" onclick="openUploadModal('${currentRepo}','${path}')">⬆️ Subir</button>
+        <button class="btn" onclick="openNewFileModal('${currentRepo}','${path}')">📄 Crear archivo</button>
         <button class="btn" onclick="openNewFolderModal('${currentRepo}','${path}')">📁 Nueva carpeta</button>
         <button class="btn btn-red" style="border-color:var(--red)" onclick="openDelRepoModal('${currentRepo}')">🗑️ Eliminar repo</button>
       </div>
+    </div>
+    <div style="position:relative;max-width:320px;margin-bottom:12px;">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;">🔍</span>
+      <input type="text" id="file-search-input" placeholder="Buscar archivos o carpetas..." style="padding-left:30px;width:100%;" oninput="onFileSearchInput(this.value)" />
     </div>
     <div class="bulk-bar" id="bulk-bar">
       <span class="bulk-bar-text" id="bulk-bar-text">0 seleccionados</span>
@@ -491,7 +509,38 @@ function renderFiles(items, path){
         <button class="btn btn-red" onclick="openBulkDeleteModal()">🗑️ Eliminar seleccionados</button>
       </div>
     </div>
-    ${!all.length ? `<div class="empty-state"><p>Este directorio está vacío</p></div>` : `
+    <div id="file-table-container"></div>
+  `;
+  renderFileTable(items, path, false);
+}
+
+function onFileSearchInput(query){
+  currentSearchQuery = query;
+  const q = query.trim().toLowerCase();
+  const filtered = !q ? currentFolderItems : currentFolderItems.filter(i=>i.name.toLowerCase().includes(q));
+  selectedItems.clear();
+  renderFileTable(filtered, currentPath, !!q);
+}
+
+function renderFileTable(items, path, isFiltered){
+  const folders = items.filter(i=>i.type==='dir').sort((a,b)=>a.name.localeCompare(b.name));
+  const files = items.filter(i=>i.type==='file').sort((a,b)=>a.name.localeCompare(b.name));
+  const all = [...folders, ...files];
+  const repo = REPOS.find(r=>r.name===currentRepo)||{};
+  const isPublic = !repo.private;
+
+  const container = document.getElementById('file-table-container');
+  if(!container) return;
+
+  if(!all.length){
+    container.innerHTML = isFiltered
+      ? `<div class="empty-state"><p>No se encontraron coincidencias para "${escapeAttr(currentSearchQuery)}"</p></div>`
+      : `<div class="empty-state"><p>Este directorio está vacío</p></div>`;
+    updateBulkBar();
+    return;
+  }
+
+  container.innerHTML = `
     <table class="file-table">
       <thead><tr>
         <th class="select-col"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)"></th>
@@ -501,7 +550,7 @@ function renderFiles(items, path){
         <th style="text-align:right">Acciones</th>
       </tr></thead>
       <tbody>
-        ${path?`<tr><td></td><td colspan="4"><div class="file-name" onclick="loadFiles('${path.split('/').slice(0,-1).join('/')}')">📁 ..</div></td></tr>`:''}
+        ${(path && !isFiltered)?`<tr><td></td><td colspan="4"><div class="file-name" onclick="loadFiles('${path.split('/').slice(0,-1).join('/')}')">📁 ..</div></td></tr>`:''}
         ${all.map(item=>{
           if(item.type==='dir'){
             return `<tr>
@@ -531,8 +580,7 @@ function renderFiles(items, path){
           </tr>`;
         }).join('')}
       </tbody>
-    </table>`}
-  `;
+    </table>`;
   updateBulkBar();
 }
 
@@ -807,6 +855,45 @@ async function doCreateRepo(){
     await loadRepos();
     openRepo(name);
   } catch(e){ showToast('Error: '+e.message,'error'); }
+}
+
+let newFileRepo='', newFilePath='';
+
+function openNewFileModal(repo, path){
+  newFileRepo=repo; newFilePath=path;
+  document.getElementById('new-file-name').value='';
+  document.getElementById('new-file-content').value='';
+  document.getElementById('new-file-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('new-file-name').focus(),100);
+}
+
+function utf8ToBase64(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+async function doCreateFile(){
+  const name = document.getElementById('new-file-name').value.trim().replace(/^\/+/,'');
+  if(!name){ showToast('Ingresá un nombre de archivo','error'); return; }
+  const content = document.getElementById('new-file-content').value;
+  const fullPath = newFilePath ? `${newFilePath}/${name}` : name;
+
+  const btn = document.getElementById('new-file-create-btn');
+  btn.disabled = true; btn.textContent = 'Creando...';
+  try {
+    let exists = false;
+    try { await api(`/repos/${USER}/${newFileRepo}/contents/${fullPath}`); exists = true; } catch(e){}
+    if(exists){
+      showToast('Ya existe un archivo con ese nombre. Usá "Subir" si querés reemplazarlo.','error');
+      return;
+    }
+    await api(`/repos/${USER}/${newFileRepo}/contents/${fullPath}`,{
+      method:'PUT', body:JSON.stringify({ message:`Create ${name}`, content: utf8ToBase64(content) })
+    });
+    showToast('Archivo "'+name+'" creado','success');
+    closeModal('new-file-modal');
+    if(currentRepo===newFileRepo) loadFiles(newFilePath);
+  } catch(e){ showToast('Error: '+e.message,'error'); }
+  finally { btn.disabled = false; btn.textContent = 'Crear archivo'; }
 }
 
 let newFolderRepo='', newFolderPath='';
