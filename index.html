@@ -273,9 +273,10 @@
   <div class="modal">
     <h3>📄 Crear archivo</h3>
     <label>Nombre del archivo</label>
-    <input type="text" id="new-file-name" placeholder="ej: datos.json" />
+    <input type="text" id="new-file-name" placeholder="ej: datos.json" oninput="onNewFileNameOrContentChange()" />
     <label style="margin-top:12px;">Contenido (opcional)</label>
-    <textarea id="new-file-content" rows="8" placeholder="Contenido del archivo..."></textarea>
+    <textarea id="new-file-content" rows="10" placeholder="Contenido del archivo..." oninput="onNewFileNameOrContentChange()" style="font-family:'Courier New',monospace;"></textarea>
+    <div id="new-file-json-status" style="font-size:12px;margin-top:6px;min-height:16px;"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('new-file-modal')">Cancelar</button>
       <button class="btn btn-green" id="new-file-create-btn" onclick="doCreateFile()">Crear archivo</button>
@@ -858,13 +859,68 @@ async function doCreateRepo(){
 }
 
 let newFileRepo='', newFilePath='';
+let newFileValidateTimer;
 
 function openNewFileModal(repo, path){
   newFileRepo=repo; newFilePath=path;
   document.getElementById('new-file-name').value='';
   document.getElementById('new-file-content').value='';
+  document.getElementById('new-file-json-status').innerHTML='';
+  document.getElementById('new-file-content').style.borderColor='';
+  document.getElementById('new-file-create-btn').disabled=false;
   document.getElementById('new-file-modal').classList.add('open');
   setTimeout(()=>document.getElementById('new-file-name').focus(),100);
+}
+
+function onNewFileNameOrContentChange(){
+  clearTimeout(newFileValidateTimer);
+  newFileValidateTimer = setTimeout(validateNewFileJson, 150);
+}
+
+/* Convierte una posición de caracter en línea/columna, para señalar dónde está el error */
+function posToLineCol(str, pos){
+  const lines = str.slice(0, pos).split('\n');
+  return { line: lines.length, col: lines[lines.length-1].length + 1 };
+}
+
+function validateNewFileJson(){
+  const name = document.getElementById('new-file-name').value.trim();
+  const content = document.getElementById('new-file-content').value;
+  const statusEl = document.getElementById('new-file-json-status');
+  const textarea = document.getElementById('new-file-content');
+  const createBtn = document.getElementById('new-file-create-btn');
+  const isJson = /\.json$/i.test(name);
+
+  if(!isJson){
+    statusEl.innerHTML = '';
+    textarea.style.borderColor = '';
+    createBtn.disabled = false;
+    return;
+  }
+
+  if(!content.trim()){
+    statusEl.innerHTML = '<span style="color:var(--muted);">Sin contenido todavía — se creará un archivo .json vacío</span>';
+    textarea.style.borderColor = '';
+    createBtn.disabled = false;
+    return;
+  }
+
+  try {
+    JSON.parse(content);
+    statusEl.innerHTML = '<span style="color:var(--accent);">✅ JSON válido</span>';
+    textarea.style.borderColor = 'var(--accent)';
+    createBtn.disabled = false;
+  } catch(e){
+    const posMatch = e.message.match(/position (\d+)/);
+    let where = '';
+    if(posMatch){
+      const { line, col } = posToLineCol(content, parseInt(posMatch[1],10));
+      where = ` (línea ${line}, columna ${col})`;
+    }
+    statusEl.innerHTML = `<span style="color:var(--red);">❌ Error de sintaxis${where}: ${escapeHtml(e.message)}</span>`;
+    textarea.style.borderColor = 'var(--red)';
+    createBtn.disabled = true;
+  }
 }
 
 function utf8ToBase64(str){
@@ -875,6 +931,12 @@ async function doCreateFile(){
   const name = document.getElementById('new-file-name').value.trim().replace(/^\/+/,'');
   if(!name){ showToast('Ingresá un nombre de archivo','error'); return; }
   const content = document.getElementById('new-file-content').value;
+
+  if(/\.json$/i.test(name) && content.trim()){
+    try { JSON.parse(content); }
+    catch(e){ showToast('El JSON tiene errores de sintaxis, corregilo antes de crear el archivo','error'); return; }
+  }
+
   const fullPath = newFilePath ? `${newFilePath}/${name}` : name;
 
   const btn = document.getElementById('new-file-create-btn');
