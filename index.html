@@ -1067,6 +1067,7 @@ function renderGists(gists){
 
 /* ── MODAL CREAR/EDITAR GIST ── */
 let gistFileCount = 0;
+let gistValidateTimers = {};
 
 function addGistFileRow(name='', content=''){
   gistFileCount++;
@@ -1076,16 +1077,78 @@ function addGistFileRow(name='', content=''){
   row.className = 'gist-file-editor-row';
   row.id = id;
   row.innerHTML = `
-    <input type="text" class="file-editor-name" placeholder="nombre-archivo.json" value="${escapeAttr(name)}" style="flex:0 0 200px;" />
-    <textarea class="file-editor-content" rows="4" placeholder="Contenido del archivo...">${escapeHtml(content)}</textarea>
+    <input type="text" class="file-editor-name" placeholder="nombre-archivo.json" value="${escapeAttr(name)}" style="flex:0 0 200px;" oninput="scheduleGistValidation('${id}')" />
+    <div style="flex:1;">
+      <textarea class="file-editor-content" rows="4" placeholder="Contenido del archivo..." style="font-family:'Courier New',monospace;width:100%;" oninput="scheduleGistValidation('${id}')">${escapeHtml(content)}</textarea>
+      <div class="gist-json-status" id="${id}-status" style="font-size:11px;margin-top:4px;min-height:14px;"></div>
+    </div>
     <button class="remove-file-btn" onclick="removeGistFileRow('${id}')" title="Quitar archivo">✕</button>
   `;
   editor.appendChild(row);
+  validateGistFileRow(id); // valida de inmediato por si ya trae contenido (ej. al editar un gist existente)
 }
 
 function removeGistFileRow(id){
   const el = document.getElementById(id);
   if(el) el.remove();
+  updateGistSaveButtonState();
+}
+
+function scheduleGistValidation(id){
+  clearTimeout(gistValidateTimers[id]);
+  gistValidateTimers[id] = setTimeout(()=>validateGistFileRow(id), 150);
+}
+
+function validateGistFileRow(id){
+  const row = document.getElementById(id);
+  if(!row) return;
+  const nameEl = row.querySelector('.file-editor-name');
+  const contentEl = row.querySelector('.file-editor-content');
+  const statusEl = document.getElementById(id+'-status');
+  const name = nameEl.value.trim();
+  const content = contentEl.value;
+  const isJson = /\.json$/i.test(name);
+
+  row.classList.remove('row-invalid');
+
+  if(!isJson){
+    if(statusEl) statusEl.innerHTML = '';
+    contentEl.style.borderColor = '';
+    updateGistSaveButtonState();
+    return;
+  }
+
+  if(!content.trim()){
+    if(statusEl) statusEl.innerHTML = '<span style="color:var(--muted);">Sin contenido todavía</span>';
+    contentEl.style.borderColor = '';
+    updateGistSaveButtonState();
+    return;
+  }
+
+  try {
+    JSON.parse(content);
+    if(statusEl) statusEl.innerHTML = '<span style="color:var(--accent);">✅ JSON válido</span>';
+    contentEl.style.borderColor = 'var(--accent)';
+  } catch(e){
+    const posMatch = e.message.match(/position (\d+)/);
+    let where = '';
+    if(posMatch){
+      const { line, col } = posToLineCol(content, parseInt(posMatch[1],10));
+      where = ` (línea ${line}, columna ${col})`;
+    }
+    if(statusEl) statusEl.innerHTML = `<span style="color:var(--red);">❌ Error de sintaxis${where}: ${escapeHtml(e.message)}</span>`;
+    contentEl.style.borderColor = 'var(--red)';
+    row.classList.add('row-invalid');
+  }
+  updateGistSaveButtonState();
+}
+
+function updateGistSaveButtonState(){
+  const btn = document.getElementById('gist-save-btn');
+  if(!btn) return;
+  const hasInvalid = document.querySelectorAll('#gist-file-editor .gist-file-editor-row.row-invalid').length > 0;
+  btn.disabled = hasInvalid;
+  btn.title = hasInvalid ? 'Corregí los errores de JSON antes de guardar' : '';
 }
 
 function escapeHtml(str){ return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1099,6 +1162,7 @@ function openGistModal(){
   document.getElementById('gist-file-editor').innerHTML = '';
   gistFileCount = 0;
   addGistFileRow('nuevo-archivo.json', '');
+  updateGistSaveButtonState();
   document.getElementById('gist-modal').classList.add('open');
 }
 
@@ -1113,6 +1177,7 @@ async function openEditGistModal(gistId){
     document.getElementById('gist-desc').value = g.description || '';
     document.getElementById('gist-public').checked = g.public;
     Object.values(g.files).forEach(f=>{ addGistFileRow(f.filename, f.content||''); });
+    updateGistSaveButtonState();
     document.getElementById('gist-modal').classList.add('open');
   } catch(e){ showToast('Error cargando gist: '+e.message,'error'); }
 }
@@ -1130,9 +1195,13 @@ async function saveGist(){
     const content = contentEl.value;
     if(!name){ nameEl.style.borderColor='var(--red)'; valid=false; return; }
     nameEl.style.borderColor='';
+    if(/\.json$/i.test(name) && content.trim()){
+      try { JSON.parse(content); }
+      catch(e){ valid=false; contentEl.style.borderColor='var(--red)'; return; }
+    }
     files[name] = { content: content || ' ' };
   });
-  if(!valid){ showToast('Todos los archivos necesitan un nombre','error'); return; }
+  if(!valid){ showToast('Revisá los archivos: falta un nombre o hay JSON con errores de sintaxis','error'); return; }
   if(!Object.keys(files).length){ showToast('Agregá al menos un archivo','error'); return; }
 
   const btn = document.getElementById('gist-save-btn');
