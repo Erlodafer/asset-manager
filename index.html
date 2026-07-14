@@ -180,7 +180,7 @@
 
 <!-- Modal: Crear / Editar Gist -->
 <div class="modal-bg" id="gist-modal">
-  <div class="modal modal-wide">
+  <div class="modal modal-fullscreen">
     <h3 id="gist-modal-title">📝 Nuevo Gist</h3>
     <label>Descripción</label>
     <input type="text" id="gist-desc" placeholder="Descripción del gist (opcional)" />
@@ -188,8 +188,10 @@
       <input type="checkbox" id="gist-public" checked> Público
     </label>
     <label style="margin-top:14px;">Archivos</label>
-    <div class="gist-file-editor" id="gist-file-editor"></div>
-    <button class="add-file-btn" onclick="addGistFileRow()">+ Agregar archivo</button>
+    <div style="flex:1;overflow-y:auto;min-height:0;">
+      <div class="gist-file-editor" id="gist-file-editor"></div>
+      <button class="add-file-btn" onclick="addGistFileRow()">+ Agregar archivo</button>
+    </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('gist-modal')">Cancelar</button>
       <button class="btn btn-purple" id="gist-save-btn" onclick="saveGist()">Guardar Gist</button>
