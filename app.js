@@ -502,6 +502,86 @@ function initCodeEditor(textareaId, gutterId){
   if(!ta || !gutter) return;
   updateLineNumbers(textareaId, gutterId);
   ta.addEventListener('scroll', ()=>{ gutter.scrollTop = ta.scrollTop; });
+  ta.addEventListener('keydown', handleEditorKeydown);
+}
+
+/* Pares que se autocompletan al escribir el caracter de apertura */
+const EDITOR_OPEN_TO_CLOSE = { '(':')', '[':']', '{':'}', '"':'"', "'":"'" };
+const EDITOR_CLOSERS = ')]}';
+
+function handleEditorKeydown(e){
+  const ta = e.target;
+
+  /* Tab → insertar una tabulación real (2 espacios) en vez de sacar el foco */
+  if(e.key === 'Tab'){
+    e.preventDefault();
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    ta.value = ta.value.slice(0,start) + '  ' + ta.value.slice(end);
+    ta.selectionStart = ta.selectionEnd = start + 2;
+    ta.dispatchEvent(new Event('input'));
+    return;
+  }
+
+  /* Enter → mantener indentación de la línea actual, aumentarla si se abrió
+     un corchete/llave/paréntesis, y expandir en 3 líneas si el cursor está
+     justo entre un par recién abierto (ej: "[|]" -> salto + tabulación + "]") */
+  if(e.key === 'Enter'){
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const before = ta.value.slice(0, start);
+    const after = ta.value.slice(end);
+    const currentLine = before.slice(before.lastIndexOf('\n')+1);
+    let indent = (currentLine.match(/^[ \t]*/) || [''])[0];
+
+    const prevChar = before.slice(-1);
+    const nextChar = after.slice(0,1);
+
+    if(EDITOR_OPEN_TO_CLOSE[prevChar] === nextChar && '([{'.includes(prevChar)){
+      e.preventDefault();
+      const innerIndent = indent + '  ';
+      const insertion = '\n' + innerIndent + '\n' + indent;
+      ta.value = before + insertion + after;
+      ta.selectionStart = ta.selectionEnd = start + 1 + innerIndent.length;
+      ta.dispatchEvent(new Event('input'));
+      return;
+    }
+
+    if('([{'.includes(prevChar)) indent += '  ';
+
+    e.preventDefault();
+    const insertion = '\n' + indent;
+    ta.value = before + insertion + after;
+    ta.selectionStart = ta.selectionEnd = start + insertion.length;
+    ta.dispatchEvent(new Event('input'));
+    return;
+  }
+
+  /* Si el cursor ya está justo antes del cierre y el usuario lo vuelve a
+     escribir a mano, saltarlo en vez de duplicarlo */
+  if((EDITOR_CLOSERS.includes(e.key) || e.key === '"' || e.key === "'") &&
+     ta.selectionStart === ta.selectionEnd &&
+     ta.value[ta.selectionStart] === e.key){
+    e.preventDefault();
+    ta.selectionStart = ta.selectionEnd = ta.selectionStart + 1;
+    return;
+  }
+
+  /* Autocompletar el cierre al escribir un caracter de apertura
+     (envuelve la selección si había texto seleccionado) */
+  const close = EDITOR_OPEN_TO_CLOSE[e.key];
+  if(close){
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    e.preventDefault();
+    if(start !== end){
+      const selected = ta.value.slice(start, end);
+      ta.value = ta.value.slice(0,start) + e.key + selected + close + ta.value.slice(end);
+      ta.selectionStart = start + 1;
+      ta.selectionEnd = start + 1 + selected.length;
+    } else {
+      ta.value = ta.value.slice(0,start) + e.key + close + ta.value.slice(start);
+      ta.selectionStart = ta.selectionEnd = start + 1;
+    }
+    ta.dispatchEvent(new Event('input'));
+  }
 }
 
 function openNewFileModal(repo, path){
