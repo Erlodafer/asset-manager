@@ -777,7 +777,7 @@ function renderGists(gists){
       </div>
       <div class="gist-files">
         ${files.map(f=>{
-          const rawUrl = f.raw_url;
+          const rawUrl = `https://gist.githubusercontent.com/${USER}/${g.id}/raw/${f.filename}`;
           return `
           <div class="gist-file-row">
             <span class="gist-file-name">📄 ${f.filename}</span>
