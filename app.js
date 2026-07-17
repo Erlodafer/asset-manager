@@ -804,11 +804,11 @@ function addGistFileRow(name='', content=''){
   row.innerHTML = `
     <input type="text" class="file-editor-name" placeholder="nombre-archivo.json" value="${escapeAttr(name)}" style="flex:0 0 200px;" oninput="scheduleGistValidation('${id}')" />
     <div style="flex:1;min-width:0;">
+      <div class="gist-json-status" id="${id}-status" style="font-size:13px;margin-bottom:4px;min-height:16px;"></div>
       <div class="code-editor-wrap">
         <div class="code-editor-gutter" id="${id}-gutter">1</div>
         <textarea class="code-editor-textarea file-editor-content" id="${id}-content" placeholder="Contenido del archivo..." spellcheck="false" oninput="scheduleGistValidation('${id}')">${escapeHtml(content)}</textarea>
       </div>
-      <div class="gist-json-status" id="${id}-status" style="font-size:11px;margin-top:4px;min-height:14px;"></div>
     </div>
     <button class="remove-file-btn" onclick="removeGistFileRow('${id}')" title="Quitar archivo">✕</button>
   `;
