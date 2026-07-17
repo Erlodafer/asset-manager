@@ -136,7 +136,7 @@
   .bulk-bar-actions { display: flex; gap: 8px; }
 
   /* ── EDITOR DE CÓDIGO ESTILO NOTEPAD++ ── */
-  .code-editor-wrap { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: #1e1e1e; margin-top: 8px; height: 220px; }
+  .code-editor-wrap { display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: #1e1e1e; margin-top: 8px; height: 380px; }
   .code-editor-gutter {
     background: #252526; color: #6e7681; text-align: right; padding: 10px 10px 10px 0;
     font-family: 'Courier New', monospace; font-size: 13px; line-height: 20px;
