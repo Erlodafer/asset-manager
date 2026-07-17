@@ -593,6 +593,7 @@ function openNewFileModal(repo, path){
   document.getElementById('new-file-create-btn').disabled=false;
   updateLineNumbers('new-file-content','new-file-gutter');
   document.getElementById('new-file-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
   setTimeout(()=>document.getElementById('new-file-name').focus(),100);
 }
 
@@ -922,6 +923,7 @@ function openGistModal(){
   addGistFileRow('nuevo-archivo.json', '');
   updateGistSaveButtonState();
   document.getElementById('gist-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 async function openEditGistModal(gistId){
@@ -937,6 +939,7 @@ async function openEditGistModal(gistId){
     Object.values(g.files).forEach(f=>{ addGistFileRow(f.filename, f.content||''); });
     updateGistSaveButtonState();
     document.getElementById('gist-modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
   } catch(e){ showToast('Error cargando gist: '+e.message,'error'); }
 }
 
@@ -1004,7 +1007,7 @@ async function doDeleteGist(){
 }
 
 /* ── UTILS ── */
-function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); document.body.style.overflow = ''; }
 
 let toastTimer;
 function showToast(msg, type=''){
@@ -1071,7 +1074,7 @@ async function doRename(){
   } catch(e){ showToast('Error al renombrar: '+e.message,'error'); }
 }
 
-window.addEventListener('click',e=>{ if(e.target.classList.contains('modal-bg')) e.target.classList.remove('open'); });
+window.addEventListener('click',e=>{ if(e.target.classList.contains('modal-bg')){ e.target.classList.remove('open'); document.body.style.overflow = ''; } });
 window.addEventListener('keydown',e=>{ if(e.key==='Enter' && document.getElementById('rename-modal').classList.contains('open')) doRename(); });
 
 initCodeEditor('new-file-content','new-file-gutter'); // sincroniza scroll gutter/textarea del modal "Crear archivo"
