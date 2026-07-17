@@ -837,6 +837,7 @@ function addGistFileRow(name='', content=''){
         <div class="code-editor-gutter" id="${id}-gutter">1</div>
         <textarea class="code-editor-textarea file-editor-content" id="${id}-content" placeholder="Contenido del archivo..." spellcheck="false" oninput="scheduleGistValidation('${id}')">${escapeHtml(content)}</textarea>
       </div>
+      <div class="gist-json-status" id="${id}-status-bottom" style="font-size:13px;margin-top:4px;min-height:16px;"></div>
     </div>
     <button class="remove-file-btn" onclick="removeGistFileRow('${id}')" title="Quitar archivo">✕</button>
   `;
@@ -862,7 +863,9 @@ function validateGistFileRow(id){
   if(!row) return;
   const nameEl = row.querySelector('.file-editor-name');
   const contentEl = row.querySelector('.file-editor-content');
-  const statusEl = document.getElementById(id+'-status');
+  const statusTop = document.getElementById(id+'-status');
+  const statusBottom = document.getElementById(id+'-status-bottom');
+  const setStatus = (html)=>{ if(statusTop) statusTop.innerHTML = html; if(statusBottom) statusBottom.innerHTML = html; };
   const name = nameEl.value.trim();
   const content = contentEl.value;
   const isJson = /\.json$/i.test(name);
@@ -870,14 +873,14 @@ function validateGistFileRow(id){
   row.classList.remove('row-invalid');
 
   if(!isJson){
-    if(statusEl) statusEl.innerHTML = '';
+    setStatus('');
     contentEl.style.borderColor = '';
     updateGistSaveButtonState();
     return;
   }
 
   if(!content.trim()){
-    if(statusEl) statusEl.innerHTML = '<span style="color:var(--muted);">Sin contenido todavía</span>';
+    setStatus('<span style="color:var(--muted);">Sin contenido todavía</span>');
     contentEl.style.borderColor = '';
     updateGistSaveButtonState();
     return;
@@ -885,7 +888,7 @@ function validateGistFileRow(id){
 
   try {
     JSON.parse(content);
-    if(statusEl) statusEl.innerHTML = '<span style="color:var(--accent);">✅ JSON válido</span>';
+    setStatus('<span style="color:var(--accent);">✅ JSON válido</span>');
     contentEl.style.borderColor = 'var(--accent)';
   } catch(e){
     const posMatch = e.message.match(/position (\d+)/);
@@ -894,7 +897,7 @@ function validateGistFileRow(id){
       const { line, col } = posToLineCol(content, parseInt(posMatch[1],10));
       where = ` (línea ${line}, columna ${col})`;
     }
-    if(statusEl) statusEl.innerHTML = `<span style="color:var(--red);">❌ Error de sintaxis${where}: ${escapeHtml(translateJsonError(e.message))}</span>`;
+    setStatus(`<span style="color:var(--red);">❌ Error de sintaxis${where}: ${escapeHtml(translateJsonError(e.message))}</span>`);
     contentEl.style.borderColor = 'var(--red)';
     row.classList.add('row-invalid');
   }
