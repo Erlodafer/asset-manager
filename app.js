@@ -608,6 +608,34 @@ function posToLineCol(str, pos){
   return { line: lines.length, col: lines[lines.length-1].length + 1 };
 }
 
+/* Traduce al español los mensajes típicos de JSON.parse (el motor del navegador
+   los devuelve siempre en inglés). Si no reconoce el patrón, devuelve un mensaje
+   genérico en español en vez de mostrar texto en inglés. */
+function translateJsonError(message){
+  const patterns = [
+    [/Unexpected end of JSON input/i, ()=>'Fin de JSON inesperado (¿falta cerrar una llave, corchete o comilla?)'],
+    [/Unexpected non-whitespace character after JSON/i, ()=>'Sobra contenido después de un JSON que ya estaba completo'],
+    [/Expected ',' or '\]' after array element/i, ()=>"Falta una coma, o falta cerrar el arreglo con ']', después de un elemento"],
+    [/Expected ',' or '}' after property value/i, ()=>"Falta una coma, o falta cerrar el objeto con '}', después del valor de una propiedad"],
+    [/Expected double-quoted property name/i, ()=>'Falta el nombre de una propiedad entre comillas dobles (¿falta una coma antes?)'],
+    [/Expected property name or '}'/i, ()=>"Se esperaba el nombre de una propiedad o el cierre '}'"],
+    [/Expected ':' after property name/i, ()=>"Falta ':' después del nombre de una propiedad"],
+    [/No number after minus sign/i, ()=>'Falta un número después del signo "-"'],
+    [/Unterminated string/i, ()=>'Hay una cadena de texto sin cerrar (falta una comilla)'],
+    [/Bad control character in string literal/i, ()=>'Hay un caracter de control inválido dentro de una cadena de texto'],
+    [/Bad escaped character/i, ()=>'Hay una secuencia de escape inválida (por ejemplo, una barra invertida mal usada)'],
+    [/Unexpected identifier/i, ()=>'Se encontró texto que no es válido en JSON (¿faltan comillas en un valor?)'],
+    [/Unexpected token '?(.+?)'? in JSON/i, (m)=>`Caracter inesperado "${m[1]}" en el JSON`],
+    [/Unexpected token '?(.+?)'?,/i, (m)=>`Caracter inesperado "${m[1]}"`],
+  ];
+
+  for(const [regex, fn] of patterns){
+    const m = message.match(regex);
+    if(m) return fn(m);
+  }
+  return 'Formato de JSON inválido';
+}
+
 function validateNewFileJson(){
   const name = document.getElementById('new-file-name').value.trim();
   const content = document.getElementById('new-file-content').value;
@@ -642,7 +670,7 @@ function validateNewFileJson(){
       const { line, col } = posToLineCol(content, parseInt(posMatch[1],10));
       where = ` (línea ${line}, columna ${col})`;
     }
-    statusEl.innerHTML = `<span style="color:var(--red);">❌ Error de sintaxis${where}: ${escapeHtml(e.message)}</span>`;
+    statusEl.innerHTML = `<span style="color:var(--red);">❌ Error de sintaxis${where}: ${escapeHtml(translateJsonError(e.message))}</span>`;
     textarea.style.borderColor = 'var(--red)';
     createBtn.disabled = true;
   }
@@ -866,7 +894,7 @@ function validateGistFileRow(id){
       const { line, col } = posToLineCol(content, parseInt(posMatch[1],10));
       where = ` (línea ${line}, columna ${col})`;
     }
-    if(statusEl) statusEl.innerHTML = `<span style="color:var(--red);">❌ Error de sintaxis${where}: ${escapeHtml(e.message)}</span>`;
+    if(statusEl) statusEl.innerHTML = `<span style="color:var(--red);">❌ Error de sintaxis${where}: ${escapeHtml(translateJsonError(e.message))}</span>`;
     contentEl.style.borderColor = 'var(--red)';
     row.classList.add('row-invalid');
   }
