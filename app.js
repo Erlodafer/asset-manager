@@ -438,9 +438,11 @@ function openNewRepoModal(){
   document.getElementById('new-repo-name').value='';
   document.getElementById('new-repo-desc').value='';
   document.getElementById('new-repo-public').checked=true;
+  document.getElementById('new-repo-readme').checked=true;
   document.getElementById('new-repo-pages').checked=true;
   document.getElementById('pages-label').style.opacity='1';
   document.getElementById('pages-warning').style.display='none';
+  document.getElementById('pages-noreadme-warning').style.display='none';
   document.getElementById('new-repo-modal').classList.add('open');
 }
 
@@ -451,16 +453,26 @@ function togglePagesCheck(){
   if(!isPublic) document.getElementById('new-repo-pages').checked = false;
 }
 
+function toggleReadmeCheck(){
+  const hasReadme = document.getElementById('new-repo-readme').checked;
+  const pagesCheckbox = document.getElementById('new-repo-pages');
+  document.getElementById('pages-label').style.opacity = hasReadme ? '1' : '0.5';
+  document.getElementById('pages-noreadme-warning').style.display = hasReadme ? 'none' : 'block';
+  pagesCheckbox.disabled = !hasReadme;
+  if(!hasReadme) pagesCheckbox.checked = false;
+}
+
 async function doCreateRepo(){
   const name = document.getElementById('new-repo-name').value.trim();
   const desc = document.getElementById('new-repo-desc').value.trim();
   const isPublic = document.getElementById('new-repo-public').checked;
+  const withReadme = document.getElementById('new-repo-readme').checked;
   const enablePages = document.getElementById('new-repo-pages').checked;
   if(!name){ showToast('Ingresá un nombre','error'); return; }
   try {
-    await api('/user/repos',{ method:'POST', body:JSON.stringify({ name, description:desc, private:!isPublic, auto_init:true }) });
+    await api('/user/repos',{ method:'POST', body:JSON.stringify({ name, description:desc, private:!isPublic, auto_init:withReadme }) });
 
-    if(enablePages && isPublic){
+    if(enablePages && isPublic && withReadme){
       // Esperar un momento para que GitHub inicialice el repo antes de activar Pages
       await new Promise(r=>setTimeout(r,2000));
       try {
@@ -473,7 +485,7 @@ async function doCreateRepo(){
         showToast('Repo creado, pero Pages falló: '+pe.message,'error');
       }
     } else {
-      showToast('Repositorio "'+name+'" creado','success');
+      showToast('Repositorio "'+name+'" creado'+(withReadme?' con README':' sin README'),'success');
     }
 
     closeModal('new-repo-modal');
