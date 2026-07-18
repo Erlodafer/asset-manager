@@ -120,10 +120,14 @@
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;">
       <input type="checkbox" id="new-repo-public" checked onchange="togglePagesCheck()"> Repositorio público (requerido para URLs raw públicas)
     </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;">
+      <input type="checkbox" id="new-repo-readme" checked onchange="toggleReadmeCheck()"> Agregar un README.md automáticamente
+    </label>
     <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;" id="pages-label">
       <input type="checkbox" id="new-repo-pages" checked> Activar GitHub Pages automáticamente (rama <code>main</code>)
     </label>
     <p id="pages-warning" style="display:none;font-size:11px;color:var(--yellow);margin-top:6px;">⚠️ GitHub Pages solo funciona en repositorios públicos (o con plan pago).</p>
+    <p id="pages-noreadme-warning" style="display:none;font-size:11px;color:var(--yellow);margin-top:6px;">⚠️ GitHub Pages necesita al menos un archivo inicial. Sin README, el repo queda vacío y no se puede activar automáticamente — podés activarlo después de subir tu primer archivo.</p>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('new-repo-modal')">Cancelar</button>
       <button class="btn btn-green" onclick="doCreateRepo()">Crear</button>
