@@ -515,6 +515,110 @@ function initCodeEditor(textareaId, gutterId){
   updateLineNumbers(textareaId, gutterId);
   ta.addEventListener('scroll', ()=>{ gutter.scrollTop = ta.scrollTop; });
   ta.addEventListener('keydown', handleEditorKeydown);
+  createEditorSearchBar(ta);
+}
+
+/* ── BUSCADOR DENTRO DEL EDITOR ── */
+function createEditorSearchBar(ta){
+  const wrap = ta.closest('.code-editor-wrap');
+  if(!wrap || wrap.querySelector('.code-editor-search')) return; // ya existe, no duplicar
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.className = 'code-editor-search-toggle';
+  toggleBtn.title = 'Buscar en este archivo (Ctrl+F)';
+  toggleBtn.textContent = '🔍';
+
+  const bar = document.createElement('div');
+  bar.className = 'code-editor-search';
+  bar.innerHTML = `
+    <input type="text" placeholder="Buscar en el archivo..." />
+    <span class="code-editor-search-count">0/0</span>
+    <button type="button" title="Anterior (Shift+Enter)">▲</button>
+    <button type="button" title="Siguiente (Enter)">▼</button>
+    <button type="button" title="Cerrar (Esc)">✕</button>
+  `;
+  wrap.appendChild(toggleBtn);
+  wrap.appendChild(bar);
+
+  const input = bar.querySelector('input');
+  const countEl = bar.querySelector('.code-editor-search-count');
+  const [prevBtn, nextBtn, closeBtn] = bar.querySelectorAll('button');
+  const state = { matches: [], current: -1 };
+
+  function recompute(){
+    const term = input.value;
+    state.matches = [];
+    if(term){
+      const text = ta.value.toLowerCase();
+      const needle = term.toLowerCase();
+      let idx = text.indexOf(needle);
+      while(idx !== -1){
+        state.matches.push(idx);
+        idx = text.indexOf(needle, idx + needle.length);
+      }
+    }
+    state.current = state.matches.length ? 0 : -1;
+    updateCount();
+  }
+
+  function updateCount(){
+    countEl.textContent = state.matches.length ? `${state.current+1}/${state.matches.length}` : '0/0';
+  }
+
+  function goTo(i){
+    if(!state.matches.length) return;
+    state.current = ((i % state.matches.length) + state.matches.length) % state.matches.length;
+    const start = state.matches[state.current];
+    const end = start + input.value.length;
+    ta.focus();
+    ta.setSelectionRange(start, end);
+    scrollSelectionIntoView(ta, start);
+    updateCount();
+  }
+
+  function openBar(){
+    bar.style.display = 'flex';
+    toggleBtn.style.display = 'none';
+    input.focus();
+    input.select();
+    recompute();
+  }
+
+  function closeBar(){
+    bar.style.display = 'none';
+    toggleBtn.style.display = '';
+    ta.focus();
+  }
+
+  toggleBtn.addEventListener('click', openBar);
+  closeBtn.addEventListener('click', closeBar);
+  nextBtn.addEventListener('click', ()=>goTo(state.current+1));
+  prevBtn.addEventListener('click', ()=>goTo(state.current-1));
+  input.addEventListener('input', ()=>{ recompute(); if(state.matches.length) goTo(0); });
+  input.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); goTo(state.current + (e.shiftKey ? -1 : 1)); }
+    else if(e.key === 'Escape'){ e.preventDefault(); closeBar(); }
+  });
+
+  // Ctrl+F / Cmd+F con el foco en el editor abre este buscador en vez del buscador del navegador
+  ta.addEventListener('keydown', (e)=>{
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f'){
+      e.preventDefault();
+      openBar();
+    }
+  });
+}
+
+/* Hace scroll dentro del textarea para que la línea encontrada quede visible */
+function scrollSelectionIntoView(ta, charIndex){
+  const before = ta.value.slice(0, charIndex);
+  const line = before.split('\n').length - 1;
+  const lineHeight = 20; // debe coincidir con line-height de .code-editor-textarea
+  const target = line * lineHeight;
+  if(target < ta.scrollTop || target > ta.scrollTop + ta.clientHeight - lineHeight){
+    ta.scrollTop = Math.max(0, target - ta.clientHeight / 2);
+  }
 }
 
 /* Pares que se autocompletan al escribir el caracter de apertura */
